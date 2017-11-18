@@ -1,0 +1,27 @@
+{
+	"devices":	
+	{
+		"feuerscharf"   : {"friendlyname":"Feuermelder",   "value":"state",       "translate":{"on":"scharf", "off":"aus"}, "line":1, "key":"A", "toggles":["on","off"]},
+		"alarmscharf"   : {"friendlyname":"Alarmanlage",  "value":"state",        "translate":{"on":"scharf", "off":"aus"}, "line":2, "key":"B", "toggles":["on","off"]},
+		"Aussensensor"  : {"friendlyname":"Aussentemp.",  "value":"temperature",                                            "line":0}
+	},
+
+	"alarms":   
+	{
+		"FEUERALARM"   : {"friendlyname":"Feueralarm",   "value":"state" , "triggervalue":"on", "resetvalue":"off"},
+		"ALARM"   	   : {"friendlyname":"Einbruch",     "value":"state" , "triggervalue":"on", "resetvalue":"off"}
+	},
+	
+	"pilight":   
+	{
+		"server"   : "10.10.0.1",
+		"port"     : 5000
+	},
+	
+	"pin":"1234",
+	
+	"pinano" : "/dev/ttyUSB0"
+
+
+}
+
