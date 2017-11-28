@@ -33,6 +33,7 @@
 // pre-compiler defines and global variables
 // ////////////////////////////////////////////////////////////////////////////
 
+#define PIDFILE "/var/run/pilight-console.pid"
 
 #define BUFFER_SIZE 1024
 #define PILIGHTPORT 5000
@@ -147,7 +148,7 @@ void readGlobalConfig()
 {
    char *configFile = NULL;
    
-   if (configFile = ReadFile("pilightconsole.json"))
+   if (configFile = ReadFile("/etc/pilight/pilightconsole.json"))
    {
        globalConfig = load_json(configFile);
        if (globalConfig)
@@ -804,6 +805,9 @@ int main( int argc, char *argv[] )
     
 */
 
+    pid_t process_id = 0;
+
+
     readGlobalConfig();
     systemState=ST_NOALARM;
 	arduinoState=ST_OFFLINE;
@@ -813,28 +817,24 @@ int main( int argc, char *argv[] )
     const int portnumber   = json_integer_value(json_object_get(pilightConfig,"port"));
     const char *hostname   = json_string_value(json_object_get(pilightConfig,"server"));
     const char *portname   = json_string_value(json_object_get(globalConfig,"pinano"));
-
     serialString = (char *) malloc(1);   serialString[0]='\0';
     tcpString = (char *) malloc(1);      tcpString[0]='\0';
 		
-    printf ("pilight-console\n\nopening %s ...",portname);
-	
+    printf ("pilight-console\n\nopening %s ...\n",portname);
     serfd = open(portname, O_RDWR | O_NOCTTY | O_SYNC);
+    printf ("nopening %s:%d ...\n",hostname, portnumber);
 	tcpfd = socket_connect((char *) hostname, portnumber); 
-    
     printf("connected\n");
 	
     if (serfd < 0) {
         printf("Error opening %s: %s\n", portname, strerror(errno));
         return -1;
     }
-
 	long save_fd = fcntl( serfd, F_GETFL );
 	save_fd |= O_NONBLOCK;
 	fcntl( serfd, F_SETFL, save_fd );
-	
+	printf ("1\n");
     set_interface_attribs(B57600,0);
-
     printf("OK\nport open, waiting for Arduino...");
     sleep(5); // wait for arduino to reset
     printf("OK\n");
@@ -854,6 +854,50 @@ int main( int argc, char *argv[] )
           parseStrings();
         status = json_string_value(pilightStatus);
     } while (!strstr(status,"success"));
+
+    // Create child process
+    process_id = fork();
+    // Indication of fork() failure
+    if (process_id < 0)
+    {
+    printf("fork failed!\n");
+    // Return failure in exit status
+    exit(1);
+    }
+    // PARENT PROCESS. Need to kill it.
+    if (process_id > 0)
+    {
+    printf("process_id of child process %d \n", process_id);
+    // return success in exit status
+    exit(0);
+    }
+
+    int pidFilehandle = open(PIDFILE, O_RDWR|O_CREAT, 0600);
+    if (pidFilehandle == -1 )
+    {
+        /* Couldn't open lock file */
+        printf("Could not open PID lock file %s, exiting", PIDFILE);
+    }
+    else
+        /* Try to lock file */
+        if (lockf(pidFilehandle,F_TLOCK,0) == -1)
+        {
+            /* Couldn't get lock on lock file */
+            printf( "Could not lock PID lock file %s, exiting", PIDFILE);
+        }
+        else
+        {
+        char str[10];
+        /* Get and format PID */
+        sprintf(str,"%d\n",getpid());
+        /* write pid to lockfile */
+        write(pidFilehandle, str, strlen(str));
+        }
+ 
+         
+
+
+
 
 	sendCommand  (tcpfd,"{\"action\": \"request values\" }\r\n");
     
