@@ -42,6 +42,10 @@ static int arduinoState;
 #define ST_OFFLINE 0
 #define ST_ONLINE  1
 
+// Severity values from Arduino (0 = lo, 3 = Ultra)
+#define SV_LO 0   
+#define SV_HI 3
+
 
 #define LCDWIDTH 20
 #define LCDHEIGHT 4
@@ -312,8 +316,32 @@ void sendCommand (int fd, char* theCommand )
     waitabit();
 }
 
+// ////////////////////////////////////////////////////////////////////////////
+// pinCodeMessage - send a line asking for pincode to the arduino
+// ////////////////////////////////////////////////////////////////////////////
+// severity - the severity state
+// ClearDisplay - send a clear Command before sending pincode message
+// ////////////////////////////////////////////////////////////////////////////
 
-
+void pinCodeMessage(int severity,int clearDisplay)
+{
+    char theLine[40];
+    bzero(theLine,40);
+    
+    if (clearDisplay==1)
+    {
+        sendCommand(serfd,"CLEAR\n");
+    }
+    if (pinValid)
+    {
+        sprintf (theLine,"MESSAGE %d 0 %d PIN OK    \n", severity, LCDHEIGHT-1);
+    }
+    else
+    {
+        sprintf (theLine,"MESSAGE %d 0 %d PINCODE ->\n", severity, LCDHEIGHT-1);
+    }
+    sendCommand(serfd,theLine);
+}
 
 // ////////////////////////////////////////////////////////////////////////////
 // handleDevice
@@ -365,10 +393,10 @@ void handleDevice (json_t *updateMessage)
             json_t *configNode;
                 
             if ( configNode= json_object_get(globalDevices,updatedDevice))   // we have configured this device
-                isAlarm=0;
+                isAlarm=SV_LO;
             else
                 if ( configNode= json_object_get(globalAlarms,updatedDevice)) // we have it configured as alarm device
-                         isAlarm=3;
+                         isAlarm=SV_HI;
 
             if ( configNode)
             {
@@ -431,10 +459,7 @@ void handleDevice (json_t *updateMessage)
                 if  (isAlarm && (strstr(theStringValue,springValue))) 
                 {
                     systemState=ST_ALARM;
-                    sendCommand(serfd,"CLEAR\n");
-                    sprintf (theLine,"MESSAGE %d 0 %d PINCODE ->\n", isAlarm, LCDHEIGHT-1);
-                    sendCommand(serfd,theLine);
-                    bzero(theLine,40);
+                    pinCodeMessage(isAlarm,1);   
                     sprintf (theLine,"MESSAGE %d 0 %d %s !!!", isAlarm, lineNumber, friendlyName);
                     lastAlarm = configNode;
                 }
@@ -445,10 +470,7 @@ void handleDevice (json_t *updateMessage)
                 {
                     systemState=ST_NOALARM;
                     lastAlarm=NULL;
-                    sendCommand(serfd,"CLEAR\n");
-                    sprintf (theLine,"MESSAGE %d 0 %d PINCODE ->\n", isAlarm, LCDHEIGHT-1);
-                    sendCommand(serfd,theLine);
-                    bzero(theLine,40);
+                    pinCodeMessage(isAlarm,1);   
                     sprintf (theLine,"MESSAGE %d 0 %d %s: %s", isAlarm-1, lineNumber, friendlyName, theStringValue);
                     sendCommand  (tcpfd,"{\"action\": \"request values\" }\r\n");
                 }
@@ -460,9 +482,7 @@ void handleDevice (json_t *updateMessage)
                     json_object_set(configNode, "currentvalue", json_string(theStringValue));
                     if (systemState != ST_ALARM) 
                     {                        
-                        sprintf (theLine,"MESSAGE %d 0 %d PINCODE ->\n", isAlarm, LCDHEIGHT-1);
-                        sendCommand(serfd,theLine);
-                        bzero(theLine,40);
+                        pinCodeMessage(isAlarm,0);   
                         sprintf (theLine,"MESSAGE %d 0 %d %s: %s", isAlarm, lineNumber, friendlyName, theStringValue);
                     }
                     
@@ -556,6 +576,7 @@ void parseStrings()
                         }
                     }
                     pinValid=0;
+                    pinCodeMessage(SV_LO,0);   
                 }
             }
             else
@@ -585,6 +606,7 @@ void parseStrings()
                     pinValid=1;
                     if (systemState == ST_ALARM)
                     {
+                        pinCodeMessage(SV_HI,0);   
        
                         json_object_foreach(globalAlarms, key, value) 
                         if (value == lastAlarm)
@@ -601,6 +623,8 @@ void parseStrings()
                     // /////////////////////////
 
                     {
+                        pinCodeMessage(SV_LO,0);   
+
                         // show the keys which can be used to toggle switches
                         
                         json_object_foreach(globalDevices, key, value)
